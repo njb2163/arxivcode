@@ -1,48 +1,100 @@
-# arxivcode
+# ArxivCode
 
-## Project Folder Structure
+Machine learning project for paper-code understanding and retrieval.
+
+## Project Structure
 
 ```
 arxivcode/
-├── .env                          # API keys (DO NOT COMMIT)
-├── .gitignore                    # Ignore .env, data/, models/
-├── README.md                     # Project documentation
-├── requirements.txt              # Python dependencies
-│
-├── data/                         # All data storage
-│   ├── raw/                      # Raw downloaded data
-│   │   ├── papers/               # ArXiv PDFs/metadata
-│   │   └── repos/                # Cloned GitHub repos
-│   ├── processed/                # Cleaned data
-│   │   ├── paper_code_pairs.json # Main dataset
-│   │   └── embeddings/           # Code embeddings (Week 1)
-│   └── metadata/                 # Logs, statistics
-│       └── collection_log.json
-│
-├── src/                          # Source code
-│   ├── data_collection/          # Data collection pipeline
-│   │   ├── github_collector.py   # GitHub API scripts
-│   │   ├── arxiv_collector.py    # ArXiv API scripts
-│   │   └── data_matcher.py       # Match papers to repos
-│   ├── models/                   # Model training & inference
-│   │   ├── code_encoder/         # Code understanding model
-│   │   └── paper_llm/            # Paper comprehension model
-│   ├── retrieval/                # Retrieval system
-│   │   ├── faiss_index.py        # Dense retrieval with FAISS
-│   │   ├── reranker.py           # Cross-encoder re-ranking
-│   │   └── snippet_extractor.py  # Code snippet extraction
-│   └── api/                      # Backend API
-│       └── app.py                # FastAPI/Flask application
-│
-├── frontend/                     # Web interface
-│   └── (Hosted on GCP or Streamlit)
-│
-├── notebooks/                    # Jupyter notebooks for exploration
-│   └── data_exploration.ipynb
-│
-├── tests/                        # Unit tests
-│   └── test_github_collector.py
-│
-└── docs/                         # Documentation
-    └── architecture.md
+├── src/                        # Source code
+│   ├── data_collection/        # Data collection pipeline
+│   │   ├── arxiv_github_collector.py
+│   │   ├── collect_papers.py   # Main collection script
+│   │   └── __init__.py
+│   ├── models/                 # Model training & inference
+│   ├── retrieval/              # Retrieval system
+│   └── api/                    # Backend API
+├── data/                       # Data storage
+│   ├── raw/papers/             # Paper-code pairs
+│   ├── processed/              # Cleaned data
+│   └── metadata/               # Logs, statistics
+├── tests/                      # Tests
+│   └── test_arxiv_github.py
+├── docs/                       # Documentation
+│   └── setup/
+│       └── DATA_COLLECTION_GUIDE.md
+├── .env.example
+├── requirements.txt
+└── README.md
 ```
+
+## Quick Start
+
+### 1. Setup Environment
+
+```bash
+# Create and activate virtual environment (Python 3.11)
+python3.11 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 2. Configure GitHub Token
+
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit .env and add your GitHub token
+# Get token at: https://github.com/settings/tokens
+# Required scopes: public_repo, read:org
+```
+
+### 3. Collect Paper-Code Pairs
+
+```bash
+# Run the collection script
+python src/data_collection/collect_papers.py
+```
+
+**Target**: 200+ paper-code pairs
+- Categories: cs.CL (Computational Linguistics), cs.LG (Machine Learning)
+- Date Range: 2020-2025
+- Min GitHub Stars: 50+
+
+**Output**: `data/raw/papers/paper_code_pairs.json`
+
+## Current Status
+
+✅ **Phase 1: Data Collection** (In Progress)
+- Papers With Code integration
+- ArXiv API integration
+- GitHub repository search
+- Filtering & metadata collection
+
+⏳ **Phase 2: Data Processing** (Upcoming)
+- Code embeddings
+- Paper comprehension
+
+⏳ **Phase 3: Retrieval System** (Upcoming)
+- FAISS indexing
+- Code snippet extraction
+
+⏳ **Phase 4: API & Frontend** (Upcoming)
+- Backend API
+- Web interface
+
+## Documentation
+
+- **Data Collection Guide**: [docs/setup/DATA_COLLECTION_GUIDE.md](docs/setup/DATA_COLLECTION_GUIDE.md)
+
+## Requirements
+
+- Python 3.11
+- GitHub Personal Access Token (recommended for data collection)
+
+## License
+
+MIT
