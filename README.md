@@ -8,8 +8,7 @@ Machine learning project for paper-code understanding and retrieval.
 arxivcode/
 ├── src/                        # Source code
 │   ├── data_collection/        # Data collection pipeline
-│   │   ├── arxiv_github_collector.py
-│   │   ├── collect_papers.py   # Main collection script
+│   │   ├── arxiv_github_collector.py  # Main collector
 │   │   └── __init__.py
 │   ├── models/                 # Model training & inference
 │   ├── retrieval/              # Retrieval system
@@ -54,17 +53,40 @@ cp .env.example .env
 
 ### 3. Collect Paper-Code Pairs
 
-```bash
-# Run the collection script
-python src/data_collection/collect_papers.py
-```
+We provide three automated collection methods:
 
-**Target**: 200+ paper-code pairs
-- Categories: cs.CL (Computational Linguistics), cs.LG (Machine Learning)
-- Date Range: 2020-2025
-- Min GitHub Stars: 50+
+**Option A: Automated GitHub Discovery** (Recommended - Fully Automated)
+```bash
+# Automatically discovers papers from GitHub trending ML/AI repos
+python src/data_collection/pwc_dataset_collector.py
+```
+- Searches GitHub for popular ML/AI repos with ArXiv references
+- Extracts paper-code pairs automatically from README files
+- No manual curation required - fully sustainable
+
+**Option B: Curated High-Impact Papers** (Fast & Reliable)
+```bash
+# Uses a curated list of 215+ high-impact papers
+python src/data_collection/pwc_hf_collector.py
+```
+- Includes landmark papers: BERT, GPT-3, LLaMA, CLIP, etc.
+- Fast - no API rate limits
+- **Note**: While the initial list was manually curated, you can expand it by adding new papers to [curated_papers_list.py](src/data_collection/curated_papers_list.py) as they become popular
+- Validates all repos against GitHub API for current stats
+
+**Option C: ArXiv + GitHub Search** (Comprehensive but slower)
+```bash
+# Searches ArXiv and matches with GitHub repos
+python src/data_collection/arxiv_github_collector.py
+```
+Note: May hit ArXiv API rate limits. Wait 15+ minutes between runs.
 
 **Output**: `data/raw/papers/paper_code_pairs.json`
+
+**Collected So Far**: 153 paper-code pairs
+- Average Stars: 17,790
+- Year Range: 2013-2023
+- Papers: BERT, GPT-3, LLaMA 2, CLIP, Mistral, Mamba, LoRA, QLoRA, FlashAttention, DPO, Whisper, etc.
 
 ## Current Status
 

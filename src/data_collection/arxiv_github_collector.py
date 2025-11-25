@@ -73,7 +73,7 @@ class ArxivGithubCollector:
                     query=query,
                     max_results=max_results,
                     sort_by=arxiv.SortCriterion.SubmittedDate,
-                    sort_order=arxiv.SortOrder.Descending
+                    sort_order=arxiv.SortOrder.Ascending  # Start with older papers (2020) that have established repos
                 )
 
                 results = self.arxiv_client.results(search)
@@ -102,6 +102,33 @@ class ArxivGithubCollector:
         logger.info(f"Total papers fetched from ArXiv: {len(papers)}")
         return papers
 
+    def extract_github_urls_from_paper(self, paper: Dict) -> List[str]:
+        """
+        Extract GitHub repository URLs from paper abstract.
+
+        Args:
+            paper: Paper dictionary with abstract
+
+        Returns:
+            List of GitHub repository URLs found in the abstract
+        """
+        abstract = paper.get('abstract', '')
+
+        # Regex to find GitHub URLs
+        github_url_pattern = r'https?://(?:www\.)?github\.com/[\w-]+/[\w.-]+'
+        matches = re.findall(github_url_pattern, abstract, re.IGNORECASE)
+
+        # Clean URLs (remove trailing punctuation, etc.)
+        cleaned_urls = []
+        for url in matches:
+            # Remove trailing punctuation
+            url = re.sub(r'[,.\)]$', '', url)
+            # Ensure proper format
+            if '/github.com/' in url.lower():
+                cleaned_urls.append(url)
+
+        return list(set(cleaned_urls))  # Remove duplicates
+
     def search_github_for_paper(
         self,
         paper: Dict,
@@ -110,6 +137,7 @@ class ArxivGithubCollector:
     ) -> List[Dict]:
         """
         Search GitHub for repositories that reference a paper.
+        First tries to extract URLs from the paper abstract, then falls back to GitHub search.
 
         Args:
             paper: Paper dictionary with arxiv_id and title
@@ -126,6 +154,47 @@ class ArxivGithubCollector:
             return []
 
         repos = []
+
+        # STEP 1: Try to extract GitHub URLs directly from the paper abstract
+        github_urls = self.extract_github_urls_from_paper(paper)
+        if github_urls:
+            logger.info(f"  Found {len(github_urls)} GitHub URL(s) in abstract")
+            for url in github_urls[:max_repos]:
+                try:
+                    # Extract owner/repo from URL
+                    match = re.search(r'github\.com/([\w-]+)/([\w.-]+)', url, re.IGNORECASE)
+                    if match:
+                        owner, repo_name = match.groups()
+                        repo = self.github.get_repo(f"{owner}/{repo_name}")
+
+                        # Check if repo meets minimum stars requirement
+                        if repo.stargazers_count >= min_stars:
+                            repo_data = {
+                                'url': repo.html_url,
+                                'name': repo.full_name,
+                                'description': repo.description,
+                                'stars': repo.stargazers_count,
+                                'forks': repo.forks_count,
+                                'language': repo.language,
+                                'created_at': repo.created_at.isoformat() if repo.created_at else None,
+                                'updated_at': repo.updated_at.isoformat() if repo.updated_at else None,
+                                'topics': repo.get_topics() if hasattr(repo, 'get_topics') else []
+                            }
+                            repos.append(repo_data)
+                            logger.info(f"  ✓ Repo from abstract: {repo.full_name} ({repo.stargazers_count} stars)")
+                        else:
+                            logger.info(f"  ✗ Repo {owner}/{repo_name} has only {repo.stargazers_count} stars (min: {min_stars})")
+
+                        time.sleep(1)  # Small delay for rate limiting
+                except Exception as e:
+                    logger.debug(f"  Error fetching repo from URL {url}: {e}")
+                    continue
+
+            # If we found repos from the abstract, return them
+            if repos:
+                return repos[:max_repos]
+
+        # STEP 2: Fall back to GitHub search if no URLs in abstract or no repos met criteria
 
         # Clean arxiv_id (remove version)
         arxiv_id_base = arxiv_id.split('v')[0]
@@ -387,13 +456,15 @@ def main():
     collector = ArxivGithubCollector(github_token=github_token)
 
     # Collect paper-code pairs
+    # Note: max_papers_to_search is PER CATEGORY
+    # Using smaller batch to avoid ArXiv rate limits
     pairs = collector.collect_paper_code_pairs(
         categories=['cs.CL', 'cs.LG'],
         start_year=2020,
-        end_year=2025,
+        end_year=2023,  # Focus on 2020-2023 for established repos
         min_stars=50,
         target_count=200,
-        max_papers_to_search=500
+        max_papers_to_search=50  # Smaller batch: 50 per category = 100 total papers
     )
 
     # Save results
