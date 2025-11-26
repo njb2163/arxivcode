@@ -44,32 +44,51 @@ python examples/test_model_loading.py
 
 See [Paper Comprehension Model Guide](docs/PAPER_COMPREHENSION_MODEL.md) for training details.
 
-## Project Structure
+## Retrieval System Testing
 
+The retrieval system uses FAISS for efficient similarity search across paper-code pairs. Test the system by running these commands in order:
+
+```bash
+# 1. Test imports
+python -c "from src.retrieval import FAISSIndexManager, DenseRetrieval; print('✅ Imports work!')"
+
+# 2. Test FAISS manager
+python -m src.retrieval.faiss_index
+
+# 3. Build index with real data
+python -m src.retrieval.build_index --input data/raw/papers/paper_code_pairs.json
+
+# 4. Test retrieval
+python -m src.retrieval.test_retrieval
 ```
-arxivcode/
-├── src/
-│   ├── data_collection/        # Paper-code pair collection
-│   └── models/                 # LLM training (LLaMA/Mistral + QLoRA)
-├── data/
-│   ├── raw/papers/             # Collected paper-code pairs
-│   └── processed/              # Training data
-├── docs/
-│   ├── DATA_COLLECTION_GUIDE.md           # Collection system details
-│   ├── COLLECTION_METHODS_EVALUATION.md   # Methods comparison
-│   └── PAPER_COMPREHENSION_MODEL.md       # Model training guide
-├── examples/
-│   └── test_model_loading.py   # Verify model setup
-└── scripts/
-    └── collect_papers.sh        # Collection pipeline
-```
+
+**Index Storage**: `data/processed/FAISS/`
+- `faiss_index.index` - Vector similarity index
+- `faiss_index_vectorizer.pkl` - TF-IDF vectorizer (for CPU-stable embeddings)
+- `faiss_metadata.pkl` - Metadata for retrieved results
+
+**Features**:
+- TF-IDF embeddings for stable, CPU-friendly similarity search
+- Repository-level code retrieval
+- Query filtering by stars, year, and topics
+- Validated on 153 paper-code pairs with strong relevance
 
 ## Current Status
 
-**Dataset**: 249 paper-code pairs
-- Average Stars: 11,470
-- Year Range: 2013-2025
-- Categories: cs.LG (138), cs.CL (65), cs.CV (30), others
+✅ **Phase 1: Data Collection** (Complete)
+- Papers With Code integration
+- ArXiv API integration
+- GitHub repository search
+- Filtering & metadata collection
+
+✅ **Phase 2: Retrieval System** (Complete)
+- FAISS indexing with TF-IDF embeddings
+- Dense retrieval pipeline
+- Query testing and validation
+
+⏳ **Phase 3: Data Processing** (Upcoming)
+- Function-level code snippet extraction
+- Cross-encoder re-ranking
 
 **Progress**:
 - ✅ Data Collection (2-stage: curated + automated)

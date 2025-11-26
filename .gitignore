@@ -35,6 +35,32 @@ checkpoints/
 *.h5
 *.pkl
 *.pth
+
+# Additional ML/Data Science patterns
+*.index
+*.faiss
+logs/
+tensorboard/
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+dist/
+build/
+*.egg-info/
+*.tmp
+*.temp
+.tmp/
+.temp/
+.vscode/settings.json
+!.vscode/extensions.json
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 *.bin
 *.safetensors
 
