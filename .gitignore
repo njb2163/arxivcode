@@ -29,8 +29,15 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 
-# Models
-models/
+# Model outputs
+output/
+checkpoints/
 *.h5
 *.pkl
 *.pth
+*.bin
+*.safetensors
+
+# Hugging Face cache
+.cache/
+huggingface/
