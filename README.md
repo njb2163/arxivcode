@@ -53,40 +53,69 @@ cp .env.example .env
 
 ### 3. Collect Paper-Code Pairs
 
-We provide three automated collection methods:
+We use a **two-stage collection approach**:
 
-**Option A: Automated GitHub Discovery** (Recommended - Fully Automated)
+#### Stage 1: Initial Curated Collection (Starting Point)
 ```bash
-# Automatically discovers papers from GitHub trending ML/AI repos
-python src/data_collection/pwc_dataset_collector.py
-```
-- Searches GitHub for popular ML/AI repos with ArXiv references
-- Extracts paper-code pairs automatically from README files
-- No manual curation required - fully sustainable
-
-**Option B: Curated High-Impact Papers** (Fast & Reliable)
-```bash
-# Uses a curated list of 215+ high-impact papers
+# Collect from manually curated list of 163 high-impact papers
 python src/data_collection/pwc_hf_collector.py
 ```
-- Includes landmark papers: BERT, GPT-3, LLaMA, CLIP, etc.
-- Fast - no API rate limits
-- **Note**: While the initial list was manually curated, you can expand it by adding new papers to [curated_papers_list.py](src/data_collection/curated_papers_list.py) as they become popular
-- Validates all repos against GitHub API for current stats
+- **Purpose**: Provides high-quality baseline with landmark papers
+- **Papers**: BERT, GPT-3, LLaMA, CLIP, Mistral, Mamba, FlashAttention, etc.
+- **Result**: 153 validated papers (some repos no longer exist or have <50 stars)
+- **Maintenance**: Update [curated_papers_list.py](src/data_collection/curated_papers_list.py) with new landmark papers as they emerge
 
-**Option C: ArXiv + GitHub Search** (Comprehensive but slower)
+#### Stage 2: Automated Periodic Expansion ⭐
 ```bash
-# Searches ArXiv and matches with GitHub repos
-python src/data_collection/arxiv_github_collector.py
+# Automatically scrape community-curated "Awesome" lists on GitHub
+python src/data_collection/awesome_papers_collector.py
 ```
-Note: May hit ArXiv API rate limits. Wait 15+ minutes between runs.
+- **Purpose**: Periodically discover new papers from the community
+- **Sources**: 10+ "Awesome" lists (Awesome-LLM, ML-Papers-of-the-Week, etc.)
+- **Fully Automated**: Scrapes markdown files, extracts ArXiv IDs and GitHub URLs
+- **Sustainable**: Lists maintained by the community, no manual intervention
+- **Result**: ~100 new papers per run
+
+#### Merge Collections
+```bash
+# Combine both sources and remove duplicates
+python src/data_collection/merge_collections.py
+```
+- Deduplicates by ArXiv ID
+- Generates unified dataset and statistics
+
+**Complete Workflow**
+
+Quick start (runs all stages):
+```bash
+./scripts/collect_papers.sh
+```
+
+Or run stages individually:
+```bash
+# Initial collection
+python src/data_collection/pwc_hf_collector.py
+
+# Expand with latest papers (run periodically - weekly/monthly)
+python src/data_collection/awesome_papers_collector.py
+
+# Merge everything
+python src/data_collection/merge_collections.py
+```
+
+To skip curated collection and only run automated scraping:
+```bash
+./scripts/collect_papers.sh --skip-curated
+```
 
 **Output**: `data/raw/papers/paper_code_pairs.json`
 
-**Collected So Far**: 153 paper-code pairs
-- Average Stars: 17,790
-- Year Range: 2013-2023
-- Papers: BERT, GPT-3, LLaMA 2, CLIP, Mistral, Mamba, LoRA, QLoRA, FlashAttention, DPO, Whisper, etc.
+**✅ Current Collection: 249 paper-code pairs**
+- **Average Stars**: 11,470
+- **Year Range**: 2013-2025
+- **Categories**: cs.LG (138), cs.CL (65), cs.CV (30), cs.IR (6), others (10)
+- **Top Papers**: TensorFlow (192K stars), PyTorch (95K stars), DistilBERT (153K stars), LangChain (120K stars)
+- **Collection Method**: Curated baseline (153) + Automated scraping (100) - 4 duplicates = 249 unique papers
 
 ## Current Status
 
