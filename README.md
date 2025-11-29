@@ -23,14 +23,23 @@ cp .env.example .env
 # Get token at: https://github.com/settings/tokens
 ```
 
-### 3. Collect Papers
+### 3. Collect Papers & Generate Dataset
 
 ```bash
-# Run complete collection pipeline
-./scripts/collect_papers.sh
+# Run complete pipeline (all 5 stages)
+python src/data_collection/run_full_pipeline.py
+
+# Quick test (10 papers, no code download)
+python src/data_collection/run_full_pipeline.py --quick-test
+
+# Skip code download (faster, papers + QA only)
+python src/data_collection/run_full_pipeline.py --skip-code-download
 ```
 
-Output: `data/raw/papers/paper_code_pairs.json` (249 papers currently)
+**Output**:
+- `data/raw/papers/paper_code_pairs.json` - 249 papers
+- `data/raw/papers/paper_code_with_files.json` - With actual code files
+- `data/processed/train.json` + `eval.json` - 5,829 QA pairs
 
 ### 4. Setup Paper Comprehension Model
 
@@ -61,7 +70,7 @@ arxivcode/
 ├── examples/
 │   └── test_model_loading.py   # Verify model setup
 └── scripts/
-    └── collect_papers.sh        # Collection pipeline
+    └── cleanup_git_dirs.sh      # Remove nested .git dirs
 ```
 
 ## Current Status
@@ -71,18 +80,12 @@ arxivcode/
 - Year Range: 2013-2025
 - Categories: cs.LG (138), cs.CL (65), cs.CV (30), others
 
-**Progress**:
-- ✅ Data Collection (2-stage: curated + automated)
-- ✅ Model Setup (QLoRA with LLaMA-3/Mistral)
-- ⏳ Training Pipeline (in progress)
-- ⏳ Retrieval System
-- ⏳ API & Frontend
-
 ## Documentation
 
-- **[Data Collection Guide](docs/DATA_COLLECTION_GUIDE.md)** - Collection pipeline details
-- **[Collection Methods Evaluation](docs/COLLECTION_METHODS_EVALUATION.md)** - Method comparison & rationale
-- **[Paper Comprehension Model](docs/PAPER_COMPREHENSION_MODEL.md)** - Model training & deployment
+See `docs/` for:
+- **[DATA_COLLECTION_GUIDE.md](docs/DATA_COLLECTION_GUIDE.md)** - How collection works
+- **[COLLECTION_METHODS_EVALUATION.md](docs/COLLECTION_METHODS_EVALUATION.md)** - Why this approach
+- **[PAPER_COMPREHENSION_MODEL.md](docs/PAPER_COMPREHENSION_MODEL.md)** - Training the model
 
 ## Requirements
 
