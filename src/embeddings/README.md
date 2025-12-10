@@ -1,14 +1,38 @@
-# Code Encoder Training Workflow
+# Embeddings Workflow
 
-This guide explains how to train a contrastive learning model that learns to align paper descriptions with their corresponding code implementations.
+This guide covers two workflows for generating code embeddings:
+
+1. **Training Workflow**: Fine-tune CodeBERT using contrastive learning to align papers with code
+2. **Inference Workflow**: Generate embeddings using pretrained CodeBERT (Task 2 & 3)
+
+---
 
 ## Overview
 
-The workflow trains two encoders (paper encoder and code encoder) using CodeBERT to create embeddings where:
+### Training Workflow
+
+Trains two encoders (paper encoder and code encoder) using CodeBERT to create embeddings where:
 - **Matching pairs** (paper + its code) are close together
 - **Non-matching pairs** are far apart
 
 These embeddings are then used for semantic code retrieval: given a paper query, find the most relevant code.
+
+### Inference Workflow (Task 2 & 3)
+
+Generates embeddings from code snippets using pretrained CodeBERT:
+- **Task 2**: Extract function-level code snippets from Python files
+- **Task 3**: Generate embeddings and save in NumPy format (`code_embeddings.npy`)
+
+This workflow performs **inference only** - it does NOT fine-tune the model.
+
+---
+
+## Which Workflow Should I Use?
+
+- **Use Training Workflow** if you want to fine-tune CodeBERT for better alignment between papers and code
+- **Use Inference Workflow (Task 2 & 3)** if you want to quickly generate embeddings from code snippets using pretrained CodeBERT
+
+Both workflows can be used independently or together.
 
 ---
 
@@ -16,11 +40,13 @@ These embeddings are then used for semantic code retrieval: given a paper query,
 
 1. **Data**: You need `data/raw/papers/paper_code_with_files.json` (created by data collection pipeline with abstracts and code files)
 2. **Environment**: Python 3.11 with required packages (see main `requirements.txt`)
-3. **GPU** (optional but recommended): Training is faster on GPU
+3. **GPU** (optional but recommended): Training is faster on GPU, inference works on CPU
 
 ---
 
-## Step-by-Step Workflow
+# Training Workflow
+
+## Step-by-Step Training Workflow
 
 ### Step 1: Parse Paper-Code Pairs
 
@@ -206,7 +232,9 @@ python src/embeddings/train_code_encoder.py \
 
 ---
 
-## Quick Start (All Steps)
+## Quick Start
+
+### For Training (Contrastive Learning)
 
 Run everything in sequence:
 
@@ -226,6 +254,27 @@ Or use the bash script (if available):
 ./scripts/run_day4.sh  # Runs steps 1-2
 python src/embeddings/train_code_encoder.py  # Step 3
 ```
+
+### For Embedding Generation (Task 2 & 3)
+
+```bash
+# Task 2: Extract code snippets
+python src/data_collection/extract_snippets.py \
+    --input data/raw/papers/paper_code_with_files.json \
+    --output data/processed/code_snippets.json
+
+# Task 3: Generate embeddings
+python src/embeddings/generate_code_embeddings.py \
+    --json_path data/processed/code_snippets.json \
+    --output_path data/processed/snippet_embeddings.json \
+    --snippets \
+    --build_faiss
+```
+
+This will create:
+- `data/processed/embeddings/code_embeddings.npy` (Task 3 output)
+- `data/processed/embeddings/metadata.json` (Task 3 output)
+- `data/processed/faiss_index.index` (for retrieval)
 
 ---
 
@@ -289,22 +338,175 @@ python src/embeddings/train_code_encoder.py --batch_size 4
 
 ---
 
+# Inference Workflow (Task 2 & 3)
+
+## Generating Embeddings (Task 2 & 3)
+
+This section covers generating embeddings from code snippets using pretrained CodeBERT (inference only, no fine-tuning).
+
+### Prerequisites
+
+1. **Data**: You need `data/raw/papers/paper_code_with_files.json` (created by data collection pipeline)
+2. **Code Snippets**: Extracted function-level code snippets (Task 2)
+
+---
+
+### Task 2: Extract Code Snippets
+
+**Command:**
+```bash
+python src/data_collection/extract_snippets.py \
+    --input data/raw/papers/paper_code_with_files.json \
+    --output data/processed/code_snippets.json \
+    --min-lines 50 \
+    --require-docstring
+```
+
+**What it does:**
+- Parses Python files using AST
+- Extracts individual function definitions and class methods
+- Filters functions with docstrings and >50 lines (configurable)
+- Saves each function as a separate JSON object with:
+  - Paper information (paper_id, paper_title, paper_abstract, paper_url)
+  - Repository information (repo_name, repo_url)
+  - Code snippet details (file_path, function_name, code_text)
+  - Metadata (line_numbers, has_docstring, num_lines)
+
+**Output:**
+- `data/processed/code_snippets.json` - Flat list of code snippets ready for embedding
+
+**Parameters:**
+- `--min-lines`: Minimum number of lines for extraction (default: 50)
+- `--require-docstring`: Require docstrings for extraction (default: True)
+- `--no-require-docstring`: Don't require docstrings
+- `--max-papers`: Limit number of papers to process (optional)
+
+---
+
+### Task 3: Generate Embeddings with CodeBERT
+
+**Command:**
+```bash
+python src/embeddings/generate_code_embeddings.py \
+    --json_path data/processed/code_snippets.json \
+    --output_path data/processed/snippet_embeddings.json \
+    --snippets \
+    --use-cls-token \
+    --include-paper-context \
+    --paper-context-weight 0.3 \
+    --build_faiss
+```
+
+**What it does:**
+1. **Loads CodeBERT**: Uses pretrained `microsoft/codebert-base` (inference only)
+2. **Processes snippets**: For each code snippet:
+   - Optionally combines paper title + abstract with code text
+   - Tokenizes the text
+   - Extracts CLS token embedding (768 dimensions)
+3. **Saves outputs**:
+   - `data/processed/embeddings/code_embeddings.npy` - NumPy array of all embeddings
+   - `data/processed/embeddings/metadata.json` - Metadata in same order as embeddings
+   - `data/processed/snippet_embeddings.json` - Full JSON with embeddings (backward compatibility)
+4. **Builds FAISS index** (if `--build_faiss` is used):
+   - Creates searchable index for fast retrieval
+   - Saves to `data/processed/faiss_index.index` and `faiss_metadata.pkl`
+
+**Output Files:**
+- `data/processed/embeddings/code_embeddings.npy` - Shape: `[num_snippets, 768]`
+- `data/processed/embeddings/metadata.json` - Metadata array matching embeddings order
+- `data/processed/snippet_embeddings.json` - Full results with embeddings as lists
+- `data/processed/faiss_index.index` - FAISS index (if built)
+- `data/processed/faiss_metadata.pkl` - FAISS metadata (if built)
+
+**Key Parameters:**
+- `--snippets`: Process code snippets format (required for Task 2 output)
+- `--use-cls-token`: Extract CLS token embedding (Task 3 format, default: True)
+- `--no-cls-token`: Use mean pooling instead of CLS token
+- `--include-paper-context`: Combine paper title + abstract with code (default: True)
+- `--no-paper-context`: Code only (no paper context)
+- `--paper-context-weight`: Weight for paper context (0.0-1.0, default: 0.3)
+- `--build_faiss`: Build FAISS index after generating embeddings
+- `--batch_size`: Batch size for processing (default: 8)
+- `--max_length`: Maximum sequence length (default: 512)
+
+**What you'll see:**
+```
+Generating Code Embeddings from Code Snippets
+Input JSON: data/processed/code_snippets.json
+Model: microsoft/codebert-base
+Batch size: 8
+Max length: 512
+Include paper context: True
+Paper context weight: 30.0%
+Use CLS token (Task 3 format): True
+
+Loading CodeBERT model: microsoft/codebert-base
+NOTE: This is INFERENCE ONLY - the model will NOT be fine-tuned.
+Loaded 1250 code snippets
+
+Generating embeddings (processing 157 batches)...
+Processing batches: 100%|████████| 157/157 [05:23<00:00,  2.05s/batch]
+
+✓ Generated embeddings for 1250 code snippets
+
+Saving Task 3 format outputs:
+  Embeddings: data/processed/embeddings/code_embeddings.npy
+  Metadata: data/processed/embeddings/metadata.json
+✓ Saved 1250 embeddings to data/processed/embeddings/code_embeddings.npy
+  Shape: (1250, 768) (snippets, embedding_dim)
+✓ Saved metadata to data/processed/embeddings/metadata.json
+```
+
+---
+
+### Processing Original Format (paper_code_with_files.json)
+
+If you want to process the original nested format instead of snippets:
+
+```bash
+python src/embeddings/generate_code_embeddings.py \
+    --json_path data/raw/papers/paper_code_with_files.json \
+    --output_path data/processed/code_embeddings.json \
+    --batch_size 8
+```
+
+This processes entire code files (not function-level snippets).
+
+---
+
+### Testing the FAISS Index
+
+After building the index, test it:
+
+```bash
+python test_faiss_index.py \
+    --index_path data/processed/faiss_index.index \
+    --metadata_path data/processed/faiss_metadata.pkl \
+    --embedding_dim 768
+```
+
+This will:
+- Load the FAISS index
+- Test retrieval with sample queries
+- Show top results with scores and metadata
+
+---
+
 ## Next Steps
 
-After training completes:
+After generating embeddings:
 
-1. **Generate Embeddings** (Day 7):
-   - Use trained model to create embeddings for all code snippets
-   - Save embeddings for retrieval system
+1. **Test Retrieval**:
+   - Use `test_faiss_index.py` to verify index works
+   - Test with semantic queries (e.g., "masked language modeling")
 
-2. **Validation Metrics**:
-   - Compute Recall@K (does correct code rank in top K?)
-   - Compute MRR (Mean Reciprocal Rank)
-   - Visual spot checks
-
-3. **Integration**:
-   - Connect to retrieval system (FAISS)
+2. **Integration**:
+   - Connect to retrieval system
    - Use in end-to-end pipeline
+
+3. **Fine-tuning** (Optional):
+   - Train custom encoder using contrastive learning (see training section above)
+   - Replace pretrained embeddings with fine-tuned ones
 
 ---
 
@@ -312,21 +514,34 @@ After training completes:
 
 ```
 src/embeddings/
-├── paper_code_parser.py      # Step 1: Parse JSON → text pairs
-├── contrastive_dataset.py     # Step 2: Create PyTorch Dataset
-├── data_loader_setup.py      # Step 2: Create DataLoaders
-├── code_encoder_model.py     # CodeBERT encoder wrapper
-├── contrastive_loss.py        # InfoNCE loss function
-└── train_code_encoder.py      # Step 3: Training loop
+├── paper_code_parser.py         # Step 1: Parse JSON → text pairs (training)
+├── contrastive_dataset.py        # Step 2: Create PyTorch Dataset (training)
+├── data_loader_setup.py         # Step 2: Create DataLoaders (training)
+├── code_encoder_model.py        # CodeBERT encoder wrapper
+├── contrastive_loss.py          # InfoNCE loss function (training)
+├── train_code_encoder.py        # Step 3: Training loop
+└── generate_code_embeddings.py   # Task 3: Generate embeddings (inference)
+
+src/data_collection/
+└── extract_snippets.py          # Task 2: Extract code snippets
 
 data/processed/
-├── parsed_pairs.json          # Output of Step 1
-└── dataset_info.json          # Output of Step 2
+├── parsed_pairs.json            # Output of Step 1 (training)
+├── dataset_info.json            # Output of Step 2 (training)
+├── code_snippets.json           # Output of Task 2 (snippets)
+├── snippet_embeddings.json       # Output of Task 3 (full JSON)
+└── embeddings/
+    ├── code_embeddings.npy      # Task 3: NumPy array of embeddings
+    └── metadata.json            # Task 3: Metadata matching embeddings
+
+data/processed/
+├── faiss_index.index            # FAISS index (if built)
+└── faiss_metadata.pkl           # FAISS metadata (if built)
 
 checkpoints/code_encoder/
-├── best_model.pt              # Best trained model
-├── checkpoint_epoch_N.pt      # Periodic checkpoints
-└── training_history.json      # Training curves
+├── best_model.pt                # Best trained model
+├── checkpoint_epoch_N.pt         # Periodic checkpoints
+└── training_history.json        # Training curves
 ```
 
 ---

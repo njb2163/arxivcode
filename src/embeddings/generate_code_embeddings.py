@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 def generate_embedding(
     encoder: CodeEncoder,
     code_text: str,
-    max_length: int = 512
+    max_length: int = 512,
+    use_cls_token: bool = False
 ) -> np.ndarray:
     """
     Generate embedding for a single code text using CodeBERT.
@@ -43,6 +44,8 @@ def generate_embedding(
         encoder: CodeEncoder instance (pretrained CodeBERT)
         code_text: Code content as string
         max_length: Maximum sequence length for tokenization
+        use_cls_token: If True, extract CLS token embedding (Task 3 format).
+                      If False, use mean pooling (default).
     
     Returns:
         Embedding vector as numpy array (embedding_dim,)
@@ -63,7 +66,13 @@ def generate_embedding(
     # Generate embedding (inference mode - no gradients)
     encoder.model.eval()
     with torch.no_grad():
-        embedding = encoder(input_ids, attention_mask)
+        if use_cls_token:
+            # Task 3 format: Extract CLS token embedding (768 dimensions)
+            outputs = encoder.model(input_ids=input_ids, attention_mask=attention_mask)
+            embedding = outputs.last_hidden_state[:, 0, :]  # CLS token is first token
+        else:
+            # Default: Use CodeEncoder's mean pooling
+            embedding = encoder(input_ids, attention_mask)
     
     # Convert to numpy and squeeze batch dimension
     embedding_np = embedding.cpu().numpy().squeeze(0)
@@ -74,7 +83,8 @@ def generate_embedding(
 def generate_embeddings_batch(
     encoder: CodeEncoder,
     code_texts: List[str],
-    max_length: int = 512
+    max_length: int = 512,
+    use_cls_token: bool = False
 ) -> np.ndarray:
     """
     Generate embeddings for a batch of code texts (more efficient).
@@ -83,6 +93,8 @@ def generate_embeddings_batch(
         encoder: CodeEncoder instance
         code_texts: List of code content strings
         max_length: Maximum sequence length
+        use_cls_token: If True, extract CLS token embedding (Task 3 format).
+                      If False, use mean pooling (default).
     
     Returns:
         Embeddings array (batch_size, embedding_dim)
@@ -103,7 +115,13 @@ def generate_embeddings_batch(
     # Generate embeddings (inference mode)
     encoder.model.eval()
     with torch.no_grad():
-        embeddings = encoder(input_ids, attention_mask)
+        if use_cls_token:
+            # Task 3 format: Extract CLS token embedding (768 dimensions)
+            outputs = encoder.model(input_ids=input_ids, attention_mask=attention_mask)
+            embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token is first token
+        else:
+            # Default: Use CodeEncoder's mean pooling
+            embeddings = encoder(input_ids, attention_mask)
     
     # Convert to numpy
     embeddings_np = embeddings.cpu().numpy()
@@ -293,7 +311,8 @@ def process_code_snippets(
     max_length: int = 512,
     device: Optional[str] = None,
     include_paper_context: bool = True,
-    paper_context_weight: float = 0.3
+    paper_context_weight: float = 0.3,
+    use_cls_token: bool = True
 ) -> List[Dict]:
     """
     Process code snippets JSON (from Task 2) and generate embeddings for each snippet.
@@ -325,6 +344,7 @@ def process_code_snippets(
     logger.info(f"Include paper context: {include_paper_context}")
     if include_paper_context:
         logger.info(f"Paper context weight: {paper_context_weight:.1%}")
+    logger.info(f"Use CLS token (Task 3 format): {use_cls_token}")
     logger.info("=" * 60)
     
     # Load JSON file
@@ -433,7 +453,8 @@ def process_code_snippets(
                     embedding = generate_embedding(
                         encoder=encoder,
                         code_text=code_text,
-                        max_length=max_length
+                        max_length=max_length,
+                        use_cls_token=use_cls_token
                     )
                     results.append({
                         "embedding": embedding.tolist(),
@@ -450,15 +471,44 @@ def process_code_snippets(
     
     logger.info(f"\n✓ Generated embeddings for {len(results)} code snippets")
     
+    # Extract embeddings array and metadata for Task 3 format
+    embeddings_array = np.array([r["embedding"] for r in results], dtype=np.float32)
+    metadata_only = [r["metadata"] for r in results]
+    
     # Save results if output path provided
     if output_path:
         output_path_obj = Path(output_path)
         output_path_obj.parent.mkdir(parents=True, exist_ok=True)
         
+        # Save in JSON format (existing format)
         logger.info(f"\nSaving embeddings to: {output_path}")
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2)
         logger.info(f"✓ Saved {len(results)} embeddings to {output_path}")
+        
+        # Also save in Task 3 format: code_embeddings.npy and metadata.json
+        # Task 3 expects: data/processed/embeddings/code_embeddings.npy
+        output_dir = output_path_obj.parent
+        # Create embeddings subdirectory if it doesn't exist
+        embeddings_dir = output_dir / "embeddings"
+        embeddings_dir.mkdir(parents=True, exist_ok=True)
+        
+        embeddings_npy_path = embeddings_dir / "code_embeddings.npy"
+        metadata_json_path = embeddings_dir / "metadata.json"
+        
+        logger.info(f"\nSaving Task 3 format outputs:")
+        logger.info(f"  Embeddings: {embeddings_npy_path}")
+        logger.info(f"  Metadata: {metadata_json_path}")
+        
+        # Save embeddings as numpy array
+        np.save(str(embeddings_npy_path), embeddings_array)
+        logger.info(f"✓ Saved {len(embeddings_array)} embeddings to {embeddings_npy_path}")
+        logger.info(f"  Shape: {embeddings_array.shape} (snippets, embedding_dim)")
+        
+        # Save metadata as JSON (same order as embeddings)
+        with open(metadata_json_path, "w", encoding="utf-8") as f:
+            json.dump(metadata_only, f, indent=2, ensure_ascii=False)
+        logger.info(f"✓ Saved metadata to {metadata_json_path}")
     
     # Print summary
     logger.info("\n" + "=" * 60)
@@ -673,6 +723,18 @@ def main():
         default=0.3,
         help="Weight for paper context (0.0-1.0). Higher = more paper text relative to code. (default: 0.3)"
     )
+    parser.add_argument(
+        "--use-cls-token",
+        action="store_true",
+        default=True,
+        help="Use CLS token embedding (Task 3 format, default: True)"
+    )
+    parser.add_argument(
+        "--no-cls-token",
+        action="store_false",
+        dest="use_cls_token",
+        help="Use mean pooling instead of CLS token"
+    )
     
     args = parser.parse_args()
     
@@ -686,7 +748,8 @@ def main():
             max_length=args.max_length,
             device=args.device,
             include_paper_context=args.include_paper_context,
-            paper_context_weight=args.paper_context_weight
+            paper_context_weight=args.paper_context_weight,
+            use_cls_token=args.use_cls_token
         )
     else:
         results = process_paper_code_with_files(
