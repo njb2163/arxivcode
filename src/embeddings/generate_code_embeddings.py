@@ -291,7 +291,9 @@ def process_code_snippets(
     model_name: str = "microsoft/codebert-base",
     batch_size: int = 8,
     max_length: int = 512,
-    device: Optional[str] = None
+    device: Optional[str] = None,
+    include_paper_context: bool = True,
+    paper_context_weight: float = 0.3
 ) -> List[Dict]:
     """
     Process code snippets JSON (from Task 2) and generate embeddings for each snippet.
@@ -306,6 +308,9 @@ def process_code_snippets(
         batch_size: Batch size for processing (larger = faster but more memory)
         max_length: Maximum sequence length for tokenization
         device: Device to use ('cuda', 'cpu', or None for auto)
+        include_paper_context: If True, combine paper title + abstract with code text
+        paper_context_weight: Weight for paper context (0.0-1.0). Higher = more paper text.
+                            Only used if include_paper_context=True. 0.3 means ~30% paper, 70% code.
     
     Returns:
         List of dictionaries with embeddings and metadata
@@ -317,6 +322,9 @@ def process_code_snippets(
     logger.info(f"Model: {model_name}")
     logger.info(f"Batch size: {batch_size}")
     logger.info(f"Max length: {max_length}")
+    logger.info(f"Include paper context: {include_paper_context}")
+    if include_paper_context:
+        logger.info(f"Paper context weight: {paper_context_weight:.1%}")
     logger.info("=" * 60)
     
     # Load JSON file
@@ -349,12 +357,36 @@ def process_code_snippets(
         if not code_text.strip():
             continue
         
-        code_texts.append(code_text)
+        # Combine paper context with code if enabled
+        if include_paper_context:
+            paper_title = snippet.get("paper_title", "")
+            paper_abstract = snippet.get("paper_abstract", "")
+            
+            # Build paper context text
+            paper_context_parts = []
+            if paper_title:
+                paper_context_parts.append(paper_title)
+            if paper_abstract:
+                # Truncate abstract if too long (to leave room for code)
+                abstract_max_length = int(len(code_text) * paper_context_weight / (1 - paper_context_weight))
+                if len(paper_abstract) > abstract_max_length:
+                    paper_abstract = paper_abstract[:abstract_max_length] + "..."
+                paper_context_parts.append(paper_abstract)
+            
+            paper_context = " ".join(paper_context_parts)
+            
+            # Combine: paper context + code
+            # Format: "Paper: [title and abstract] Code: [code]"
+            combined_text = f"Paper: {paper_context}\n\nCode:\n{code_text}"
+            code_texts.append(combined_text)
+        else:
+            code_texts.append(code_text)
         
         # Extract and organize metadata
         metadata_list.append({
             "paper_id": snippet.get("paper_id", ""),
             "paper_title": snippet.get("paper_title", ""),
+            "paper_abstract": snippet.get("paper_abstract", ""),
             "paper_url": snippet.get("paper_url", ""),
             "repo_name": snippet.get("repo_name", ""),
             "repo_url": snippet.get("repo_url", ""),
@@ -623,6 +655,24 @@ def main():
         action="store_true",
         help="Use GPU for FAISS index (requires faiss-gpu)"
     )
+    parser.add_argument(
+        "--include-paper-context",
+        action="store_true",
+        default=True,
+        help="Include paper title and abstract with code when generating embeddings (default: True)"
+    )
+    parser.add_argument(
+        "--no-paper-context",
+        action="store_false",
+        dest="include_paper_context",
+        help="Don't include paper context (code only)"
+    )
+    parser.add_argument(
+        "--paper-context-weight",
+        type=float,
+        default=0.3,
+        help="Weight for paper context (0.0-1.0). Higher = more paper text relative to code. (default: 0.3)"
+    )
     
     args = parser.parse_args()
     
@@ -634,7 +684,9 @@ def main():
             model_name=args.model_name,
             batch_size=args.batch_size,
             max_length=args.max_length,
-            device=args.device
+            device=args.device,
+            include_paper_context=args.include_paper_context,
+            paper_context_weight=args.paper_context_weight
         )
     else:
         results = process_paper_code_with_files(

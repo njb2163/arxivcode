@@ -273,6 +273,7 @@ class CodeSnippetExtractor:
             paper_id = paper.get("arxiv_id", "")
             paper_title = paper.get("title", "")
             paper_url = paper.get("url", "")
+            paper_abstract = paper.get("abstract", "")
 
             if not paper_id:
                 continue
@@ -316,6 +317,7 @@ class CodeSnippetExtractor:
                             "paper_id": paper_id,
                             "paper_title": paper_title,
                             "paper_url": paper_url,
+                            "paper_abstract": paper_abstract,
                             # Repository information
                             "repo_name": repo_name,
                             "repo_url": repo_url,
