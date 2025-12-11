@@ -18,10 +18,10 @@ def test_retrieval_with_real_data():
     # Load index
     print("\n1. Loading FAISS index...")
     retriever = DenseRetrieval()
-    retriever.load_index(
-        "data/processed/FAISS/faiss_index.index",
-        "data/processed/FAISS/faiss_metadata.pkl"
-    )
+    # retriever.load_index(
+    #     "data/processed/FAISS/faiss_index.index",
+    #     "data/processed/FAISS/faiss_metadata.pkl"
+    # )
     
     # Print statistics
     stats = retriever.get_statistics()
@@ -54,11 +54,45 @@ def test_retrieval_with_real_data():
         print(f"\n📝 Query {i}: '{query}'")
         print("-" * 60)
         
-        results = retriever.retrieve(query, top_k=3)
+        results = retriever.retrieve(query, top_k=10, use_reranker=True)
         
         if not results:
             print("   ⚠️  No results found")
             continue
+        
+        # For LoRA query, also show pre-reranking candidates
+        if "LoRA" in query:
+            print("\n   🔍 Pre-reranking candidates (top 50):")
+            pre_rerank_results = retriever.retrieve(query, top_k=50, use_reranker=False)
+            lora_in_candidates = any("2403.17887" in r['metadata'].get('paper_id', '') for r in pre_rerank_results)
+            print(f"   LoRA paper (2403.17887) in top 50 candidates: {lora_in_candidates}")
+            if lora_in_candidates:
+                lora_rank = next((i+1 for i, r in enumerate(pre_rerank_results) if "2403.17887" in r['metadata'].get('paper_id', '')), None)
+                print(f"   LoRA paper rank before reranking: {lora_rank}")
+                lora_score = next((r['score'] for r in pre_rerank_results if "2403.17887" in r['metadata'].get('paper_id', '')), None)
+                print(f"   LoRA paper score before reranking: {lora_score:.4f}")
+            
+            # Try hybrid scoring for LoRA
+            print("\n   🔍 Testing hybrid scoring for LoRA:")
+            hybrid_results = retriever.retrieve(query, top_k=10, use_reranker=True, hybrid_scoring=True)
+            lora_in_hybrid = any("2403.17887" in r['metadata'].get('paper_id', '') for r in hybrid_results)
+            print(f"   LoRA paper in hybrid results: {lora_in_hybrid}")
+            if lora_in_hybrid:
+                lora_rank_hybrid = next((i+1 for i, r in enumerate(hybrid_results) if "2403.17887" in r['metadata'].get('paper_id', '')), None)
+                print(f"   LoRA paper rank with hybrid scoring: {lora_rank_hybrid}")
+                lora_score_hybrid = next((r['score'] for r in hybrid_results if "2403.17887" in r['metadata'].get('paper_id', '')), None)
+                print(f"   LoRA paper score with hybrid scoring: {lora_score_hybrid:.4f}")
+            
+            # Try keyword fallback for LoRA
+            print("\n   🔍 Testing keyword fallback for LoRA:")
+            fallback_results = retriever.retrieve(query, top_k=10, use_reranker=True, keyword_fallback=True)
+            lora_in_fallback = any("2403.17887" in r['metadata'].get('paper_id', '') for r in fallback_results)
+            print(f"   LoRA paper in fallback results: {lora_in_fallback}")
+            if lora_in_fallback:
+                lora_rank_fallback = next((i+1 for i, r in enumerate(fallback_results) if "2403.17887" in r['metadata'].get('paper_id', '')), None)
+                print(f"   LoRA paper rank with keyword fallback: {lora_rank_fallback}")
+                lora_score_fallback = next((r['score'] for r in fallback_results if "2403.17887" in r['metadata'].get('paper_id', '')), None)
+                print(f"   LoRA paper score with keyword fallback: {lora_score_fallback:.4f}")
         
         for result in results:
             meta = result['metadata']
@@ -76,7 +110,8 @@ def test_retrieval_with_real_data():
     results_filtered = retriever.retrieve(
         query,
         top_k=5,
-        filters={'min_stars': 100}
+        filters={'min_stars': 100},
+        use_reranker=True
     )
     
     print(f"\n📝 Query: '{query}' (min_stars=100)")
@@ -94,7 +129,7 @@ def test_retrieval_with_real_data():
     all_papers = set()
     
     for query in test_queries[:5]:
-        results = retriever.retrieve(query, top_k=10)
+        results = retriever.retrieve(query, top_k=10, use_reranker=True)
         for r in results:
             meta = r['metadata']
             all_repos.add(meta.get('repo_name', ''))
@@ -104,7 +139,7 @@ def test_retrieval_with_real_data():
     print(f"   ✅ Unique papers in results: {len(all_papers)}")
     
     # Check score distribution
-    results = retriever.retrieve(test_queries[0], top_k=20)
+    results = retriever.retrieve(test_queries[0], top_k=20, use_reranker=True)
     scores = [r['score'] for r in results]
     
     if scores:
@@ -130,7 +165,7 @@ def test_specific_paper(paper_id: str):
     
     # Search with paper title or abstract keywords
     query = f"paper {paper_id}"
-    results = retriever.retrieve(query, top_k=10)
+    results = retriever.retrieve(query, top_k=10, use_reranker=True)
     
     # Filter for specific paper
     paper_results = [

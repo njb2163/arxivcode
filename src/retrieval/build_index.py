@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def build_index_from_collection(
     input_path: str,
     output_dir: str,
-    embedding_model: str = "tfidf"  # SWAP: Change to "microsoft/codebert-base" when switching to CodeBERT
+    embedding_model: str = "microsoft/codebert-base"  # Updated to CodeBERT
 ):
     """
     Build FAISS index from collected paper-code pairs.
@@ -79,8 +79,8 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="tfidf",  # Changed default to TF-IDF for macOS stability
-        help="Embedding model name ('tfidf' or sentence-transformers model)"
+        default="microsoft/codebert-base",  # Updated to CodeBERT
+        help="Embedding model name (sentence-transformers model)"
     )
     
     args = parser.parse_args()
